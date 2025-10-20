@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">GhostPrint</string>
+    <string name="accessibility_service_description">
+        GhostPrint accessibility service for logging input events
+    </string>
+    <string name="accessibility_service_summary">
+        Monitors input events with your consent
+    </string>
+</resources>
