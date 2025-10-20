@@ -33,20 +33,28 @@ class SensorLogger(context: Context) : SensorEventListener {
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
                 val raw = RawEvent(
-                    timestamp = ts, eventType = "accel",
-                    accelX = event.values[0], accelY = event.values[1], accelZ = event.values[2]
+                    timestamp = ts,
+                    eventType = "accel",
+                    accelX = event.values[0],
+                    accelY = event.values[1],
+                    accelZ = event.values[2]
                 )
                 ioScope.launch { db.rawEventDao().insert(raw) }
             }
             Sensor.TYPE_GYROSCOPE -> {
                 val raw = RawEvent(
-                    timestamp = ts, eventType = "gyro",
-                    gyroX = event.values[0], gyroY = event.values[1], gyroZ = event.values[2]
+                    timestamp = ts,
+                    eventType = "gyro",
+                    gyroX = event.values[0],
+                    gyroY = event.values[1],
+                    gyroZ = event.values[2]
                 )
                 ioScope.launch { db.rawEventDao().insert(raw) }
             }
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // No-op
+    }
 }

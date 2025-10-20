@@ -1,4 +1,3 @@
-// ui/ConsentScreen.kt
 package com.ghostprint.ui.ui
 
 import android.provider.Settings

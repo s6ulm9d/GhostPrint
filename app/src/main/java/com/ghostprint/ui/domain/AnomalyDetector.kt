@@ -1,10 +1,10 @@
-// domain/AnomalyDetector.kt
 package com.ghostprint.ui.domain
 
 import android.content.Context
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.abs
+import com.ghostprint.ui.domain.SettingsStore
 
 class AnomalyDetector(context: Context) {
     private val mutex = Mutex()
