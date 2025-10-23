@@ -9,17 +9,21 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.ghostprint.ui.domain.SettingsStore
+import com.ghostprint.ui.navigation.NavRoutes
 import com.ghostprint.ui.service.LoggerForegroundService
-import kotlinx.coroutines.launch
+import com.ghostprint.ui.ui.logs.LogsScreen
+import com.ghostprint.ui.ui.logs.LogsViewModel
 
 class MainActivity : ComponentActivity() {
 
@@ -39,52 +43,48 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
-                    val scope = rememberCoroutineScope()
-                    var consent by remember { mutableStateOf(settingsStore.isConsentEnabled()) }
-                    var paused by remember { mutableStateOf(settingsStore.isLoggingPaused()) }
+                val navController = rememberNavController()
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black)
-                            .padding(16.dp)
+                Scaffold(
+                    bottomBar = {
+                        NavigationBar {
+                            NavigationBarItem(
+                                selected = navController.currentDestination?.route == NavRoutes.Controls.route,
+                                onClick = { navController.navigate(NavRoutes.Controls.route) },
+                                label = { Text("Controls") },
+                                icon = {}
+                            )
+                            NavigationBarItem(
+                                selected = navController.currentDestination?.route == NavRoutes.Logs.route,
+                                onClick = { navController.navigate(NavRoutes.Logs.route) },
+                                label = { Text("Logs") },
+                                icon = {}
+                            )
+                        }
+                    }
+                ) { paddingValues ->
+                    NavHost(
+                        navController = navController,
+                        startDestination = NavRoutes.Controls.route,
+                        modifier = Modifier.padding(paddingValues)
                     ) {
-                        Text("GhostPrint Controls", color = Color.White)
-                        Spacer(Modifier.height(12.dp))
-
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Consent enabled", color = Color.White)
-                            Switch(checked = consent, onCheckedChange = {
-                                consent = it
-                                scope.launch { settingsStore.setConsentEnabled(it) }
-                            })
+                        composable(NavRoutes.Controls.route) {
+                            // GhostPrintControls must be in the same package (com.ghostprint.ui)
+                            // or imported from its package. If not yet created, add it under com.ghostprint.ui.
+                            GhostPrintControls(
+                                settingsStore = settingsStore,
+                                onStartService = { startLoggerService() },
+                                onStopService = { stopLoggerService() },
+                                onOpenAccessibility = {
+                                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                }
+                            )
                         }
-
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Logging paused", color = Color.White)
-                            Switch(checked = paused, onCheckedChange = {
-                                paused = it
-                                scope.launch { settingsStore.setLoggingPaused(it) }
-                            })
+                        composable(NavRoutes.Logs.route) {
+                            val dao = (application as GhostPrintApp).db.logEventDao()
+                            val viewModel = LogsViewModel(dao)
+                            LogsScreen(viewModel)
                         }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            Button(onClick = { startLoggerService() }) { Text("Start Service") }
-                            Button(onClick = { stopLoggerService() }) { Text("Stop Service") }
-                            Button(onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
-                                Text("Open Accessibility")
-                            }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        Text(
-                            "Enable service in Accessibility, then toggle Consent ON and Logging Paused OFF to start capturing.",
-                            color = Color.Gray
-                        )
                     }
                 }
             }
@@ -93,7 +93,11 @@ class MainActivity : ComponentActivity() {
 
     private fun startLoggerService() {
         val intent = Intent(this, LoggerForegroundService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
         Log.d("MainActivity", "LoggerForegroundService started")
     }
 
