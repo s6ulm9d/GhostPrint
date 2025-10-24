@@ -11,23 +11,20 @@ import java.util.concurrent.TimeUnit
 
 class GhostPrintApp : Application() {
 
-    // Expose DB for LogsViewModel
     lateinit var db: AppDatabase
         private set
 
     override fun onCreate() {
         super.onCreate()
 
-        // Initialize Room DB
         db = Room.databaseBuilder(
             applicationContext,
             AppDatabase::class.java,
             "ghostprint.db"
         )
-            .fallbackToDestructiveMigration() // safe while iterating; replace with migrations later
+            .fallbackToDestructiveMigration()
             .build()
 
-        // Schedule periodic feature extraction
         val request = PeriodicWorkRequestBuilder<FeatureExtractionWorker>(
             15, TimeUnit.MINUTES
         ).build()

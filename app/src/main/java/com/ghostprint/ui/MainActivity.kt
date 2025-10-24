@@ -69,8 +69,6 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(paddingValues)
                     ) {
                         composable(NavRoutes.Controls.route) {
-                            // GhostPrintControls must be in the same package (com.ghostprint.ui)
-                            // or imported from its package. If not yet created, add it under com.ghostprint.ui.
                             GhostPrintControls(
                                 settingsStore = settingsStore,
                                 onStartService = { startLoggerService() },

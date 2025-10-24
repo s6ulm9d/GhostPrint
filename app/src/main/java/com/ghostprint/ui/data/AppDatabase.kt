@@ -16,7 +16,7 @@ import androidx.room.RoomDatabase
         LogEvent::class
     ],
     version = 2,
-    exportSchema = false // disable export to avoid schema export errors; enable later if needed
+    exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -39,8 +39,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "ghostprint.db"
                 )
-                    // Wipes and rebuilds instead of migrating if no Migration object.
-                    // Safe for dev, but consider proper migrations in production.
+                    // Safe for dev; replace with proper migrations in production.
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { INSTANCE = it }

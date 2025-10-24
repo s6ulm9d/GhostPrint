@@ -7,6 +7,12 @@ import kotlinx.coroutines.channels.Channel
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicInteger
 
+/**
+ * In-memory + persistent pipeline for log events.
+ * - Keeps a ring buffer for quick snapshot.
+ * - Streams events to LogStream for live UI.
+ * - Batches inserts into Room for efficiency.
+ */
 object LogPipeline {
     private const val RING_SIZE = 2048
     private val ring = ArrayDeque<LogEvent>(RING_SIZE)
@@ -23,6 +29,8 @@ object LogPipeline {
                 val first = dbChannel.receive()
                 batch.clear()
                 batch.add(first)
+
+                // Collect up to 500 events or until timeout
                 withTimeoutOrNull(100) {
                     repeat(499) {
                         val item = dbChannel.tryReceive().getOrNull() ?: return@repeat
@@ -53,6 +61,8 @@ object LogPipeline {
     }
 
     fun snapshot(): List<LogEvent> {
-        synchronized(ring) { return ring.toList().reversed() }
+        synchronized(ring) {
+            return ring.toList().reversed()
+        }
     }
 }

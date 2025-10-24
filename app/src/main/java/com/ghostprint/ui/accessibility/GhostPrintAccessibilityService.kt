@@ -15,15 +15,12 @@ import com.ghostprint.ui.policy.DefaultPolicies
 import com.ghostprint.ui.service.LogPipeline
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-/**
- * AccessibilityService that captures user interaction events
- * (with explicit consent) and pushes them into the LogPipeline.
- */
 class GhostPrintAccessibilityService : AccessibilityService() {
 
-    private val ioScope = CoroutineScope(Dispatchers.IO)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var detector: AnomalyDetector
     private lateinit var settings: SettingsStore
     private lateinit var alertBatcher: AlertBatcher
@@ -35,31 +32,45 @@ class GhostPrintAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+
         detector = AnomalyDetector(this)
         settings = SettingsStore(this)
         alertBatcher = AlertBatcher(this)
 
-        serviceInfo = serviceInfo.apply {
-            flags = flags or
-                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                    AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
+        // Configure service info explicitly to capture all relevant events
+        val info = AccessibilityServiceInfo().apply {
+            eventTypes = AccessibilityEvent.TYPES_ALL_MASK
+            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+            flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                    AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            notificationTimeout = 50
         }
+        serviceInfo = info
 
         Channels.ensure(this)
-        Log.d("GhostPrintService", "AccessibilityService connected")
+        Log.i(TAG, "AccessibilityService connected (full event mask, interactive windows enabled)")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
+        if (!::settings.isInitialized) settings = SettingsStore(this)
         if (!settings.isConsentEnabled() || settings.isLoggingPaused()) return
 
         val pkg = event.packageName?.toString() ?: return
-        val cls = event.className?.toString() ?: ""
+        val cls = event.className?.toString() ?: "unknown"
 
-        // Apply capture policy
+        // Ignore dynamic UIs (e.g., popups, overlays, and modals)
+        if (cls.contains("Popup") || cls.contains("Dialog") || cls.contains("Toast")) {
+            Log.d(TAG, "Ignoring dynamic UI: $cls")
+            return
+        }
+
+        // Filter out irrelevant apps (e.g., system apps or unwanted background apps)
         if (pkg in policy.packagesBlock) return
         if (policy.suppressDynamicRegions && cls in policy.classesBlock) return
 
+        // Log event if it’s a valid interaction
         val ts = System.currentTimeMillis()
         val text = event.text?.joinToString() ?: ""
 
@@ -71,18 +82,33 @@ class GhostPrintAccessibilityService : AccessibilityService() {
             text = text
         )
 
-        ioScope.launch { LogPipeline.enqueue(logEvent) }
+        serviceScope.launch { LogPipeline.enqueue(logEvent) }
 
-        val isAnomaly = detector.onEventTimestamp(ts)
-        if (isAnomaly) {
+        // Specific handling for home screen / app drawer (launcher events)
+        if (pkg.contains("launcher") || pkg.contains("home")) {
+            when (event.eventType) {
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                    Log.d(TAG, "HOME_SCREEN/DRAWER window state changed")
+                }
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                    Log.d(TAG, "HOME_SCREEN/DRAWER content changed")
+                }
+            }
+        }
+
+        // Specific event types can be added here (e.g., if you want to track specific UI actions)
+
+        // Anomaly detection
+        if (detector.onEventTimestamp(ts)) {
             alertBatcher.submit("Interaction anomaly: ${event.eventType} in $pkg")
         }
 
-        Log.d("GhostPrintService", "[$ts] pkg=$pkg cls=$cls text=$text anomaly=$isAnomaly")
+        Log.v(TAG, "[$ts] pkg=$pkg cls=$cls type=${event.eventType} text=$text")
     }
 
     override fun onKeyEvent(event: KeyEvent?): Boolean {
         if (event == null) return false
+        if (!::settings.isInitialized) settings = SettingsStore(this)
         if (!settings.isConsentEnabled() || settings.isLoggingPaused()) return false
 
         val ts = System.currentTimeMillis()
@@ -98,18 +124,21 @@ class GhostPrintAccessibilityService : AccessibilityService() {
             text = msg
         )
 
-        ioScope.launch { LogPipeline.enqueue(logEvent) }
+        serviceScope.launch { LogPipeline.enqueue(logEvent) }
 
-        val isAnomaly = detector.onKeyTimestamp(ts, isDown)
-        if (isAnomaly) {
+        if (detector.onKeyTimestamp(ts, isDown)) {
             alertBatcher.submit("Key timing anomaly: $msg")
         }
 
-        Log.d("GhostPrintService", "[$ts] $type $msg anomaly=$isAnomaly")
+        Log.d(TAG, "[$ts] $type $msg")
         return false
     }
 
     override fun onInterrupt() {
-        Log.d("GhostPrintService", "AccessibilityService interrupted")
+        Log.w(TAG, "AccessibilityService interrupted")
+    }
+
+    companion object {
+        private const val TAG = "GhostPrintService"
     }
 }
